@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     A_karate = torch.from_numpy(nx.to_numpy_array(G_karate))
 
-    K = 8
+    K = 4
     mu = torch.ones(A_karate.shape[0], K)
     tau = torch.eye(K) * torch.mean(A_karate) # Use this as our prior
     sigma = torch.tensor(0.1)
