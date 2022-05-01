@@ -10,7 +10,7 @@ class WSBM(nn.Module):
         # variational inference, so we can use whatever distrbutions we want, so long as we can
         # reparameterise the sampling with respect to the parameters. Otherwise, we can't run
         # gradient based optimisation. This does mean we have to get clever and pull some tricks
-        # such as using Gumbel Softmax sampling with the categorical distribution
+        # such as using a softmax method of selecting blocks during training
 
         self.prior_mu = nn.Parameter(mu.clone(), requires_grad=False)
         self.prior_tau = nn.Parameter(tau.clone(), requires_grad=False)
@@ -27,7 +27,7 @@ class WSBM(nn.Module):
     def forward(self, A): # This computes the ELBO
         # Reparameterised sampling
         posterior_tau = torch.distributions.Normal(self.tau, torch.clamp(self.sigma, min=1e-6))
-        z = F.softmax(self.mu, dim=1)
+        z = F.softmax(self.mu, dim=1) # This makes it differentiable :)
 
         theta = torch.clamp(posterior_tau.rsample(), 1e-6, 1-1e-6)
         log_likelihood = 0
@@ -36,11 +36,12 @@ class WSBM(nn.Module):
         theta_z = torch.zeros_like(A)
         for i in range(A.shape[0]):
             for j in range(A.shape[1]):
-                theta_z[i, j] = theta @ z[j] @ z[i] # This is like indexing, but differentiable
+                theta_z[i, j] = theta @ z[j] @ z[i] # This is like indexing, but differentiable :)
 
         log_likelihood = torch.sum(A * torch.log(theta_z) + (1 - A) * torch.log(1 - theta_z))
 
-        elbo = log_likelihood# - self.kl()
+        # Compute evidence lower bound
+        elbo = log_likelihood - self.kl()
 
         return elbo
 
@@ -56,15 +57,6 @@ class WSBM(nn.Module):
 
         # Note, since we assume all parameters to be independent, we can add their KL divergences
         return kl_mu + kl_tau
-
-    def mle(self):
-        z = torch.argmax(self.mu, dim=1)
-        A = torch.zeros(self.mu.shape[0], self.mu.shape[0])
-        for i in range(A.shape[0]):
-            for j in range(A.shape[1]):
-                theta_z = self.tau[z[i], z[j]]
-                A[i, j] = torch.round(theta_z)
-        return z, A
 
     def sample(self):
         z = torch.distributions.Categorical(logits=self.mu).sample()
