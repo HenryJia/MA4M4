@@ -32,13 +32,15 @@ class WSBM(nn.Module):
         theta = torch.clamp(posterior_tau.rsample(), 1e-6, 1-1e-6)
         log_likelihood = 0
 
-        # This is not vectorised, and kind of inefficient, but hey ho, good enough
+        # This is not fully vectorised, and kind of inefficient, but hey ho, good enough
+        theta_z = torch.zeros_like(A)
         for i in range(A.shape[0]):
             for j in range(A.shape[1]):
-                theta_z = theta @ z[j] @ z[i] # This is like indexing, but differentiable
-                log_likelihood += A[i, j] * torch.log(theta_z) + (1 - A[i, j]) * torch.log(1 - theta_z)
+                theta_z[i, j] = theta @ z[j] @ z[i] # This is like indexing, but differentiable
 
-        elbo = log_likelihood - self.kl()
+        log_likelihood = torch.sum(A * torch.log(theta_z) + (1 - A) * torch.log(1 - theta_z))
+
+        elbo = log_likelihood# - self.kl()
 
         return elbo
 
@@ -113,7 +115,7 @@ if __name__ == "__main__":
     nx.draw_circular(G_karate, with_labels=True)
     model.sample()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-1)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
     pb = tqdm()
     for i in range(200):
         optimizer.zero_grad()
