@@ -32,11 +32,16 @@ class WSBM(nn.Module):
         theta = torch.clamp(posterior_tau.rsample(), 1e-6, 1-1e-6)
         log_likelihood = 0
 
-        # This is not fully vectorised, and kind of inefficient, but hey ho, good enough
-        theta_z = torch.zeros_like(A)
-        for i in range(A.shape[0]):
-            for j in range(A.shape[1]):
-                theta_z[i, j] = theta @ z[j] @ z[i] # This is like indexing, but differentiable :)
+        # This is not fully vectorised, and kind of inefficient
+        #theta_z = torch.zeros_like(A)
+        #for i in range(A.shape[0]):
+            #for j in range(A.shape[1]):
+                #theta_z[i, j] = theta @ z[j] @ z[i] # This is like indexing, but differentiable :)
+
+        # Fully vectorised version
+        # This is equivalent to the above, but literally 50x-100x faster
+        # And took me way too damn long to figure out
+        theta_z = z @ theta @ z.T
 
         log_likelihood = torch.sum(A * torch.log(theta_z) + (1 - A) * torch.log(1 - theta_z))
 
@@ -99,23 +104,23 @@ if __name__ == "__main__":
 
     K = 4
     mu = torch.ones(A_karate.shape[0], K)
-    tau = torch.eye(K) * torch.mean(A_karate) # Use this as our prior
+    tau = torch.eye(K) * torch.mean(A_karate) * 0.5 # Use this as our prior
     sigma = torch.tensor(0.1)
     alpha = 0.5
 
     model = WSBM(mu, tau, sigma, alpha)
     nx.draw_circular(G_karate, with_labels=True)
-    model.sample()
 
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
     pb = tqdm()
-    for i in range(200):
+    for i in range(10000):
         optimizer.zero_grad()
         elbo = -model(A_karate)
         elbo.backward()
         optimizer.step()
         pb.set_postfix({'elbo': elbo.item(), 'kl': model.kl().item()})
         pb.update(1)
+    pb.close()
     print(model.tau[:5, :5])
     print(model.sigma)
     print(model.mu[:5, :5])
