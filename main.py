@@ -20,14 +20,11 @@ A_karate = torch.from_numpy(nx.to_numpy_array(G_karate))
 
 K = 2
 # Set our priors
-mu = torch.zeros(A_karate.shape[0], K)
-# Steer things with the prior :)
-#mu[33, 0] = 10
-#mu[30, 0] = -10
-tau = torch.eye(K) * torch.mean(A_karate)
+c = torch.zeros(A_karate.shape[0], K)
+mu = torch.eye(K) * torch.mean(A_karate)
 sigma = torch.tensor(0.1)
 
-model = VBSBM(mu, tau, sigma, use_vi=True)
+model = VBSBM(c, mu, sigma, use_vi=True, use_degree_correction=True)
 
 #model.cuda()
 #A_karate = A_karate.cuda()
@@ -43,14 +40,7 @@ for i in range(10000):
 pb.close()
 
 colors = (np.linspace(0, 1, K) * 20 + 10)
-c, A = model.sample()
 c = torch.argmax(model.c, dim=1).numpy()
-A = A.numpy()
-
-A = A * (1 - np.eye(A.shape[0])) # Remove self loops, we know this graph has no self loops
-for i in range(A.shape[0]): # And make symmetric
-    for j in range(A.shape[1]):
-        A[i, j] = float(A[i, j] > 0 or A[j, i] > 0)
 
 plt.figure()
 pos = nx.spring_layout(G_karate, seed=1234)

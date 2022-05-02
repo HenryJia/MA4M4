@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 
 class VBSBM(nn.Module):
-    def __init__(self, c, tau, sigma, use_vi=True):
+    def __init__(self, c, mu, sigma, use_vi=True, use_degree_correction=True):
         super().__init__()
         # Normally, to do Bayesian stuff we need nice conjugate distributions. But we're using
         # variational inference, so we can use whatever distrbutions we want, so long as we can
@@ -14,13 +14,13 @@ class VBSBM(nn.Module):
         # such as using a softmax method of selecting blocks during training
 
         self.prior_c = nn.Parameter(c.clone(), requires_grad=False)
-        self.prior_tau = nn.Parameter(tau.clone(), requires_grad=False)
+        self.prior_mu = nn.Parameter(mu.clone(), requires_grad=False)
         self.prior_sigma = nn.Parameter(sigma.clone(), requires_grad=False)
 
         # Note, c has shape (n, K) where K is the number of blocks
-        # tau has shape (K, K)
+        # mu has shape (K, K)
         self.c = nn.Parameter(c)
-        self.tau = nn.Parameter(tau)
+        self.mu = nn.Parameter(mu)
         self.sigma = nn.Parameter(sigma)
 
         # Degree correction parameter
@@ -28,14 +28,15 @@ class VBSBM(nn.Module):
 
         # Whether to use variational inference
         self.use_vi = use_vi
+        self.use_degree_correction = use_degree_correction
 
 
     def forward(self, A): # This computes the ELBO
         # Reparameterised sampling
-        posterior_tau = torch.distributions.Normal(self.tau, torch.clamp(self.sigma, min=1e-6))
+        posterior_mu = torch.distributions.Normal(self.mu, torch.clamp(self.sigma, min=1e-6))
         c = F.softmax(self.c, dim=1) # This makes it differentiable :)
 
-        theta = torch.clamp(posterior_tau.rsample(), 1e-6, 1-1e-6)
+        theta = torch.clamp(posterior_mu.rsample(), 1e-6, 1-1e-6)
         log_likelihood = 0
 
         # This is not fully vectorised, and kind of inefficient
@@ -49,9 +50,11 @@ class VBSBM(nn.Module):
         # And took me way too damn long to figure out
         theta_c = c @ theta @ c.T
 
-        d = torch.clamp(self.d @ self.d.T, 1e-6)
-
-        log_likelihood = torch.sum(A * torch.log(d * theta_c) - d * theta_c)
+        if self.use_degree_correction:
+            d = torch.clamp(self.d @ self.d.T, 1e-6)
+            log_likelihood = torch.sum(A * torch.log(d * theta_c) - d * theta_c)
+        else:
+            log_likelihood = torch.sum(A * torch.log(theta_c) - (1 - A) * torch.log(1 - theta_c))
 
         # Compute evidence lower bound
         elbo = log_likelihood
@@ -62,22 +65,22 @@ class VBSBM(nn.Module):
 
     def kl(self):
         posterior_c = torch.distributions.Categorical(logits=self.c)
-        posterior_tau = torch.distributions.Normal(self.tau, torch.clamp(self.sigma, min=1e-6))
+        posterior_mu = torch.distributions.Normal(self.mu, torch.clamp(self.sigma, min=1e-6))
 
         prior_c = torch.distributions.Categorical(logits=self.prior_c)
-        prior_tau = torch.distributions.Normal(self.prior_tau, self.prior_sigma)
+        prior_mu = torch.distributions.Normal(self.prior_mu, self.prior_sigma)
 
         kl_c = torch.sum(torch.distributions.kl_divergence(posterior_c, prior_c))
-        kl_tau = torch.sum(torch.distributions.kl_divergence(posterior_tau, prior_tau))
+        kl_mu = torch.sum(torch.distributions.kl_divergence(posterior_mu, prior_mu))
 
         # Note, since we assume all parameters to be independent, we can add their KL divergences
-        return kl_c + kl_tau
+        return kl_c + kl_mu
 
     def sample(self):
         c = torch.distributions.Categorical(logits=self.c).sample()
         A = torch.zeros(self.c.shape[0], self.c.shape[0])
         for i in range(A.shape[0]):
             for j in range(A.shape[1]):
-                theta_c = self.tau[c[i], c[j]]
+                theta_c = self.mu[c[i], c[j]]
                 A[i, j] = (torch.rand(1).to(device=theta_c.device) < theta_c).float()
         return c, A
