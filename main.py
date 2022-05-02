@@ -6,7 +6,7 @@ from torch import optim
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from wsbm import WSBM, visualise_undirected_clusters
+from vbsbm import VBSBM
 
 plt.ion()
 
@@ -18,13 +18,16 @@ nx.draw(G_karate, with_labels=True, pos=pos)
 
 A_karate = torch.from_numpy(nx.to_numpy_array(G_karate))
 
-K = 3
-mu = torch.ones(A_karate.shape[0], K)
-tau = torch.eye(K) * torch.mean(A_karate) # Use this as our prior
+K = 2
+# Set our priors
+mu = torch.zeros(A_karate.shape[0], K)
+# Steer things with the prior :)
+#mu[33, 0] = 10
+#mu[30, 0] = -10
+tau = torch.eye(K) * torch.mean(A_karate)
 sigma = torch.tensor(0.1)
-alpha = 0.5
 
-model = WSBM(mu, tau, sigma, alpha)
+model = VBSBM(mu, tau, sigma, use_vi=True)
 
 #model.cuda()
 #A_karate = A_karate.cuda()
@@ -52,20 +55,3 @@ for i in range(A.shape[0]): # And make symmetric
 plt.figure()
 pos = nx.spring_layout(G_karate, seed=1234)
 nx.draw(G_karate, with_labels=True, node_color=np.array([colors[block] for block in c]), pos=pos)
-
-#plt.figure()
-#nx.draw_spring(nx.Graph(A), with_labels=True)
-
-A_karate = A_karate.numpy()
-#A_karate_clusters = visualise_undirected_clusters(c, A_karate)
-#G_karate_clusters = nx.Graph(A_karate_clusters)
-
-#print(A_karate_clusters)
-
-#plt.figure()
-#pos = nx.circular_layout(G_karate_clusters)
-#edge_labels = nx.get_edge_attributes(G_karate_clusters,'weight')
-#nx.draw_networkx(G_karate_clusters, pos, with_labels=True)
-#nx.draw_networkx_edge_labels(G_karate_clusters, pos, edge_labels=edge_labels)
-
-print('IOU:', np.sum(A_karate * A) / np.sum((A_karate + A) > 0))

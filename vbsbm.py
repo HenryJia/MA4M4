@@ -4,8 +4,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-class WSBM(nn.Module):
-    def __init__(self, c, tau, sigma, alpha):
+class VBSBM(nn.Module):
+    def __init__(self, c, tau, sigma, use_vi=True):
         super().__init__()
         # Normally, to do Bayesian stuff we need nice conjugate distributions. But we're using
         # variational inference, so we can use whatever distrbutions we want, so long as we can
@@ -23,10 +23,12 @@ class WSBM(nn.Module):
         self.tau = nn.Parameter(tau)
         self.sigma = nn.Parameter(sigma)
 
-        # Degree correction parameters
+        # Degree correction parameter
         self.d = nn.Parameter(torch.ones(c.shape[0], 1))
 
-        self.alpha = alpha
+        # Whether to use variational inference
+        self.use_vi = use_vi
+
 
     def forward(self, A): # This computes the ELBO
         # Reparameterised sampling
@@ -49,10 +51,12 @@ class WSBM(nn.Module):
 
         d = torch.clamp(self.d @ self.d.T, 1e-6)
 
-        log_likelihood = torch.sum(A * torch.log(theta_c) + (1 - A) * torch.log(1 - theta_c) - d * theta_c)
+        log_likelihood = torch.sum(A * torch.log(d * theta_c) - d * theta_c)
 
         # Compute evidence lower bound
-        elbo = log_likelihood - self.kl()
+        elbo = log_likelihood
+        if self.use_vi:
+            elbo -= self.kl()
 
         return elbo
 
@@ -77,14 +81,3 @@ class WSBM(nn.Module):
                 theta_c = self.tau[c[i], c[j]]
                 A[i, j] = (torch.rand(1).to(device=theta_c.device) < theta_c).float()
         return c, A
-
-
-def visualise_undirected_clusters(c, A):
-    A_clusters = np.zeros((np.max(c) + 1, np.max(c) + 1))
-
-    for i in range(A.shape[0]):
-        for j in range(i):
-            A_clusters[c[i], c[j]] += A[i, j]
-            A_clusters[c[j], c[i]] += A[i, j]
-
-    return A_clusters
