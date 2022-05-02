@@ -34,15 +34,15 @@ class WSBM(nn.Module):
         log_likelihood = 0
 
         # This is not fully vectorised, and kind of inefficient
-        #theta_z = torch.zeros_like(A)
+        #theta_c = torch.zeros_like(A)
         #for i in range(A.shape[0]):
             #for j in range(A.shape[1]):
-                #theta_z[i, j] = theta @ c[j] @ c[i] # This is like indexing, but differentiable :)
+                #theta_c[i, j] = theta @ c[j] @ c[i] # This is like indexing, but differentiable :)
 
         # Fully vectorised version
         # This is equivalent to the above, but literally 50x-100x faster
         # And took me way too damn long to figure out
-        theta_z = c @ theta @ c.T
+        theta_c = c @ theta @ c.T
 
         log_likelihood = torch.sum(A * torch.log(theta_c) + (1 - A) * torch.log(1 - theta_c))
 
@@ -69,8 +69,8 @@ class WSBM(nn.Module):
         A = torch.zeros(self.c.shape[0], self.c.shape[0])
         for i in range(A.shape[0]):
             for j in range(A.shape[1]):
-                theta_z = self.tau[c[i], c[j]]
-                A[i, j] = (torch.rand(1) < theta_c).float()
+                theta_c = self.tau[c[i], c[j]]
+                A[i, j] = (torch.rand(1).to(device=theta_c.device) < theta_c).float()
         return c, A
 
 
