@@ -18,9 +18,9 @@ nx.draw(G_karate, with_labels=True, pos=pos)
 
 A_karate = torch.from_numpy(nx.to_numpy_array(G_karate))
 
-K = 4
+K = 3
 mu = torch.ones(A_karate.shape[0], K)
-tau = torch.eye(K) # Use this as our prior
+tau = torch.eye(K) * torch.mean(A_karate) # Use this as our prior
 sigma = torch.tensor(0.1)
 alpha = 0.5
 

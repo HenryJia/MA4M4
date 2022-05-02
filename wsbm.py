@@ -23,6 +23,9 @@ class WSBM(nn.Module):
         self.tau = nn.Parameter(tau)
         self.sigma = nn.Parameter(sigma)
 
+        # Degree correction parameters
+        self.d = nn.Parameter(torch.ones(c.shape[0], 1))
+
         self.alpha = alpha
 
     def forward(self, A): # This computes the ELBO
@@ -44,7 +47,9 @@ class WSBM(nn.Module):
         # And took me way too damn long to figure out
         theta_c = c @ theta @ c.T
 
-        log_likelihood = torch.sum(A * torch.log(theta_c) + (1 - A) * torch.log(1 - theta_c))
+        d = torch.clamp(self.d @ self.d.T, 1e-6)
+
+        log_likelihood = torch.sum(A * torch.log(theta_c) + (1 - A) * torch.log(1 - theta_c) - d * theta_c)
 
         # Compute evidence lower bound
         elbo = log_likelihood - self.kl()
