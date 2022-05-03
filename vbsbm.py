@@ -39,15 +39,6 @@ class VBSBM(nn.Module):
         theta = torch.clamp(posterior_mu.rsample(), 1e-6, 1-1e-6)
         log_likelihood = 0
 
-        # This is not fully vectorised, and kind of inefficient
-        #theta_c = torch.zeros_like(A)
-        #for i in range(A.shape[0]):
-            #for j in range(A.shape[1]):
-                #theta_c[i, j] = theta @ c[j] @ c[i] # This is like indexing, but differentiable :)
-
-        # Fully vectorised version
-        # This is equivalent to the above, but literally 50x-100x faster
-        # And took me way too damn long to figure out
         theta_c = c @ theta @ c.T
 
         if self.use_degree_correction:
@@ -75,12 +66,3 @@ class VBSBM(nn.Module):
 
         # Note, since we assume all parameters to be independent, we can add their KL divergences
         return kl_c + kl_mu
-
-    def sample(self):
-        c = torch.distributions.Categorical(logits=self.c).sample()
-        A = torch.zeros(self.c.shape[0], self.c.shape[0])
-        for i in range(A.shape[0]):
-            for j in range(A.shape[1]):
-                theta_c = self.mu[c[i], c[j]]
-                A[i, j] = (torch.rand(1).to(device=theta_c.device) < theta_c).float()
-        return c, A
